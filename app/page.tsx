@@ -23,6 +23,10 @@ async function createSession() {
     throw new Error('error' in payload ? payload.error : 'Unable to create session.');
   }
 
+  if (!('url' in payload)) {
+    throw new Error('Unable to create session.');
+  }
+
   return payload.url;
 }
 

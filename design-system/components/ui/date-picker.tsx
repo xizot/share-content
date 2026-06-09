@@ -22,7 +22,6 @@ import {
 import { CalendarIcon, XCircleIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import * as React from 'react';
-import type { DayPickerSingleProps } from 'react-day-picker';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,7 +40,7 @@ function toDate(value: Date | string | undefined): Date | undefined {
 // ---------------------------------------------------------------------------
 
 export type DatePickerProps = Omit<
-  DayPickerSingleProps,
+  React.ComponentProps<typeof Calendar>,
   'selected' | 'onSelect' | 'mode' | 'required'
 > & {
   id?: string;
@@ -381,7 +380,7 @@ function DatePicker({
                 </div>
               ) : (
                 <div className={cn('flex h-[350px]', showTime && 'overflow-hidden')}>
-                  <Calendar initialFocus {...calendarPropsWithMode} />
+                  <Calendar {...calendarPropsWithMode} />
                   {showTime && (
                     <TimePicker
                       value={selectedTime}
