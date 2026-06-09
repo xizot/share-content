@@ -1,19 +1,29 @@
-'use client';
+"use client";
 
 import {
   Check,
   Copy,
+  Download,
+  Eraser,
   Image as ImageIcon,
   Plus,
   RefreshCw,
   Trash2,
   Upload,
-} from 'lucide-react';
-import NextImage from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+} from "lucide-react";
+import NextImage from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Badge } from '@/design-system/components/ui/badge';
-import { Button } from '@/design-system/components/ui/button';
+import { Badge } from "@/design-system/components/ui/badge";
+import { Button } from "@/design-system/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/design-system/components/ui/dialog";
 import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGES,
@@ -21,7 +31,7 @@ import {
   MAX_TEXT_LENGTH,
   type SharedImage,
   type SharedSession,
-} from '@/lib/share-session-schema';
+} from "@/lib/share-session-schema";
 
 type ApiSessionResponse = {
   session: SharedSession;
@@ -31,7 +41,7 @@ type ApiErrorResponse = {
   error: string;
 };
 
-type SaveStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'error' | 'expired';
+type SaveStatus = "idle" | "loading" | "saving" | "saved" | "error" | "expired";
 
 type ShareSessionPageProps = {
   sessionId: string;
@@ -40,7 +50,7 @@ type ShareSessionPageProps = {
 const SAVE_DEBOUNCE_MS = 700;
 
 function createImageId() {
-  return crypto.randomUUID().replaceAll('-', '').slice(0, 20);
+  return crypto.randomUUID().replaceAll("-", "").slice(0, 20);
 }
 
 function formatBytes(bytes: number) {
@@ -65,7 +75,7 @@ function getPayloadFingerprint(text: string, images: SharedImage[]) {
 
 function getDisplayMessage(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
-  return message === 'Session not found.' ? '' : message;
+  return message === "Session not found." ? "" : message;
 }
 
 async function parseApiResponse<T>(response: Response): Promise<T> {
@@ -73,9 +83,9 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const message =
-      typeof payload === 'object' && payload !== null && 'error' in payload
+      typeof payload === "object" && payload !== null && "error" in payload
         ? payload.error
-        : 'Request failed.';
+        : "Request failed.";
     throw new Error(message);
   }
 
@@ -87,8 +97,8 @@ function readImageFile(file: File): Promise<SharedImage> {
     const reader = new FileReader();
 
     reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        reject(new Error('Invalid image data.'));
+      if (typeof reader.result !== "string") {
+        reject(new Error("Invalid image data."));
         return;
       }
 
@@ -102,22 +112,28 @@ function readImageFile(file: File): Promise<SharedImage> {
       });
     };
 
-    reader.onerror = () => reject(new Error('Unable to read image.'));
+    reader.onerror = () => reject(new Error("Unable to read image."));
     reader.readAsDataURL(file);
   });
 }
 
-export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
-  const [text, setText] = useState('');
-  const [images, setImages] = useState<SharedImage[]>([]);
-  const [status, setStatus] = useState<SaveStatus>('loading');
-  const [message, setMessage] = useState('Loading session...');
-  const [copied, setCopied] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+function getSafeFileName(name: string) {
+  return name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "image";
+}
 
-  const latestFingerprintRef = useRef('');
+export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
+  const [text, setText] = useState("");
+  const [images, setImages] = useState<SharedImage[]>([]);
+  const [status, setStatus] = useState<SaveStatus>("loading");
+  const [message, setMessage] = useState("Loading session...");
+  const [copied, setCopied] = useState(false);
+  const [textCopied, setTextCopied] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
+  const latestFingerprintRef = useRef("");
   const revisionRef = useRef(0);
-  const textRef = useRef('');
+  const textRef = useRef("");
   const imagesRef = useRef<SharedImage[]>([]);
   const dirtyRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
@@ -129,32 +145,35 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     textRef.current = session.text;
     imagesRef.current = session.images;
     revisionRef.current = session.revision;
-    latestFingerprintRef.current = getPayloadFingerprint(session.text, session.images);
+    latestFingerprintRef.current = getPayloadFingerprint(
+      session.text,
+      session.images,
+    );
     dirtyRef.current = false;
   }, []);
 
   const loadSession = useCallback(
-    async (mode: 'initial' | 'manual' = 'initial') => {
-      if (mode === 'initial') {
-        setStatus('loading');
-        setMessage('Loading session...');
+    async (mode: "initial" | "manual" = "initial") => {
+      if (mode === "initial") {
+        setStatus("loading");
+        setMessage("Loading session...");
       } else {
-        setMessage('Refreshing...');
+        setMessage("Refreshing...");
       }
 
       const response = await fetch(`/api/sessions/${sessionId}`, {
-        cache: 'no-store',
+        cache: "no-store",
       });
       const payload = await parseApiResponse<ApiSessionResponse>(response);
 
-      if (mode === 'manual' && dirtyRef.current) {
-        setMessage('Save current changes before refreshing.');
+      if (mode === "manual" && dirtyRef.current) {
+        setMessage("Save current changes before refreshing.");
         return;
       }
 
       applySession(payload.session);
-      setStatus('saved');
-      setMessage('Saved');
+      setStatus("saved");
+      setMessage("Saved");
     },
     [applySession, sessionId],
   );
@@ -164,13 +183,13 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       const fingerprint = getPayloadFingerprint(nextText, nextImages);
       if (fingerprint === latestFingerprintRef.current) return;
 
-      setStatus('saving');
-      setMessage('Saving...');
+      setStatus("saving");
+      setMessage("Saving...");
 
       const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           text: nextText,
@@ -178,28 +197,31 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         }),
       });
       const payload = await parseApiResponse<ApiSessionResponse>(response);
-      const currentFingerprint = getPayloadFingerprint(textRef.current, imagesRef.current);
+      const currentFingerprint = getPayloadFingerprint(
+        textRef.current,
+        imagesRef.current,
+      );
 
       if (currentFingerprint === fingerprint) {
         applySession(payload.session);
-        setStatus('saved');
-        setMessage('Saved');
+        setStatus("saved");
+        setMessage("Saved");
         return;
       }
 
       revisionRef.current = payload.session.revision;
-      setStatus('idle');
-      setMessage('');
+      setStatus("idle");
+      setMessage("");
     },
     [applySession, sessionId],
   );
 
   const createNewSession = useCallback(async () => {
-    setStatus('loading');
-    setMessage('Creating session...');
+    setStatus("loading");
+    setMessage("Creating session...");
 
-    const response = await fetch('/api/sessions', {
-      method: 'POST',
+    const response = await fetch("/api/sessions", {
+      method: "POST",
     });
     const payload = await parseApiResponse<{ url: string }>(response);
     window.location.assign(payload.url);
@@ -208,8 +230,8 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       loadSession().catch((error: unknown) => {
-        setStatus('error');
-        setMessage(getDisplayMessage(error, 'Unable to load session.'));
+        setStatus("error");
+        setMessage(getDisplayMessage(error, "Unable to load session."));
       });
     }, 0);
 
@@ -218,7 +240,8 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   useEffect(() => {
     const fingerprint = getPayloadFingerprint(text, images);
-    if (!dirtyRef.current || fingerprint === latestFingerprintRef.current) return;
+    if (!dirtyRef.current || fingerprint === latestFingerprintRef.current)
+      return;
 
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
@@ -226,8 +249,10 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
     saveTimerRef.current = window.setTimeout(() => {
       saveSession(text, images).catch((error: unknown) => {
-        const nextMessage = getDisplayMessage(error, 'Unable to save session.');
-        setStatus(nextMessage.toLowerCase().includes('expired') ? 'expired' : 'error');
+        const nextMessage = getDisplayMessage(error, "Unable to save session.");
+        setStatus(
+          nextMessage.toLowerCase().includes("expired") ? "expired" : "error",
+        );
         setMessage(nextMessage);
       });
     }, SAVE_DEBOUNCE_MS);
@@ -241,7 +266,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   const updateText = (value: string) => {
     if (value.length > MAX_TEXT_LENGTH) {
-      setStatus('error');
+      setStatus("error");
       setMessage(`Text limit is ${formatBytes(MAX_TEXT_LENGTH)}.`);
       return;
     }
@@ -249,8 +274,8 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     dirtyRef.current = true;
     textRef.current = value;
     setText(value);
-    setStatus('idle');
-    setMessage('');
+    setStatus("idle");
+    setMessage("");
   };
 
   const addFiles = async (fileList: FileList | File[]) => {
@@ -259,19 +284,22 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     const acceptedFiles = files.slice(0, slotsLeft);
 
     if (acceptedFiles.length < files.length) {
-      setStatus('error');
+      setStatus("error");
       setMessage(`Image limit is ${MAX_IMAGES}.`);
     }
 
     const invalidFile = acceptedFiles.find(
       (file) =>
-        !ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number]) ||
-        file.size > MAX_IMAGE_BYTES,
+        !ALLOWED_IMAGE_TYPES.includes(
+          file.type as (typeof ALLOWED_IMAGE_TYPES)[number],
+        ) || file.size > MAX_IMAGE_BYTES,
     );
 
     if (invalidFile) {
-      setStatus('error');
-      setMessage(`Use PNG, JPG, WebP, or GIF up to ${formatBytes(MAX_IMAGE_BYTES)}.`);
+      setStatus("error");
+      setMessage(
+        `Use PNG, JPG, WebP, or GIF up to ${formatBytes(MAX_IMAGE_BYTES)}.`,
+      );
       return;
     }
 
@@ -282,17 +310,46 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     const updatedImages = [...imagesRef.current, ...nextImages];
     imagesRef.current = updatedImages;
     setImages(updatedImages);
-    setStatus('idle');
-    setMessage('');
+    setStatus("idle");
+    setMessage("");
   };
 
   const removeImage = (imageId: string) => {
     dirtyRef.current = true;
-    const updatedImages = imagesRef.current.filter((image) => image.id !== imageId);
+    const updatedImages = imagesRef.current.filter(
+      (image) => image.id !== imageId,
+    );
     imagesRef.current = updatedImages;
     setImages(updatedImages);
-    setStatus('idle');
-    setMessage('');
+    setStatus("idle");
+    setMessage("");
+  };
+
+  const copyText = async () => {
+    await navigator.clipboard.writeText(textRef.current);
+    setTextCopied(true);
+    setMessage("Text copied");
+    window.setTimeout(() => setTextCopied(false), 1500);
+  };
+
+  const clearText = () => {
+    if (!textRef.current) return;
+
+    setClearConfirmOpen(true);
+  };
+
+  const confirmClearText = () => {
+    updateText("");
+    setClearConfirmOpen(false);
+  };
+
+  const downloadImage = (image: SharedImage) => {
+    const link = document.createElement("a");
+    link.href = image.base64;
+    link.download = getSafeFileName(image.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   const copyLink = async () => {
@@ -303,9 +360,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   };
 
   const refreshSession = () => {
-    loadSession('manual').catch((error: unknown) => {
-      const nextMessage = getDisplayMessage(error, 'Unable to refresh session.');
-      setStatus(nextMessage.toLowerCase().includes('expired') ? 'expired' : 'error');
+    loadSession("manual").catch((error: unknown) => {
+      const nextMessage = getDisplayMessage(
+        error,
+        "Unable to refresh session.",
+      );
+      setStatus(
+        nextMessage.toLowerCase().includes("expired") ? "expired" : "error",
+      );
       setMessage(nextMessage);
     });
   };
@@ -316,23 +378,42 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         <header className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-normal">Share Content</h1>
-              <Badge variant="outline" className="max-w-full rounded-md font-sans">
+              <h1 className="text-2xl font-semibold tracking-normal">
+                Share Content
+              </h1>
+              <Badge
+                variant="outline"
+                className="max-w-full rounded-md font-sans"
+              >
                 {sessionId}
               </Badge>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={copyLink}>
-              {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-              {copied ? 'Copied' : 'Copy link'}
+            <Button
+              type="button"
+              size={"sm"}
+              variant="outline"
+              onClick={copyLink}
+            >
+              {copied ? (
+                <Check data-icon="inline-start" />
+              ) : (
+                <Copy data-icon="inline-start" />
+              )}
+              {copied ? "Copied" : "Copy link"}
             </Button>
-            <Button type="button" variant="outline" onClick={refreshSession}>
+            <Button
+              type="button"
+              size={"sm"}
+              variant="outline"
+              onClick={refreshSession}
+            >
               <RefreshCw data-icon="inline-start" />
               Refresh
             </Button>
-            <Button type="button" onClick={createNewSession}>
+            <Button type="button" size={"sm"} onClick={createNewSession}>
               <Plus data-icon="inline-start" />
               New session
             </Button>
@@ -341,17 +422,40 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
         <section className="grid min-h-0 flex-1 gap-5 overflow-hidden py-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-h-0 flex-col rounded-md border border-zinc-200 bg-white">
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
               <span className="text-sm font-medium">Text</span>
-              <span className="text-xs text-zinc-500">
-                {text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="mr-2 text-xs text-zinc-500">
+                  {text.length.toLocaleString()} /{" "}
+                  {MAX_TEXT_LENGTH.toLocaleString()}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Copy full text"
+                  disabled={!text}
+                  onClick={copyText}
+                >
+                  {textCopied ? <Check /> : <Copy />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Clear text"
+                  disabled={!text || status === "expired"}
+                  onClick={clearText}
+                >
+                  <Eraser />
+                </Button>
+              </div>
             </div>
             <textarea
               value={text}
               onChange={(event) => updateText(event.target.value)}
               placeholder="Paste text here..."
-              disabled={status === 'expired'}
+              disabled={status === "expired"}
               className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent p-4 text-sm [field-sizing:fixed] outline-none placeholder:text-zinc-400 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
@@ -359,9 +463,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
           <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
             <div
               className={[
-                'flex shrink-0 flex-col items-center justify-center rounded-md border border-dashed bg-white px-4 py-5 text-center transition-colors',
-                isDragging ? 'border-zinc-900 bg-zinc-100' : 'border-zinc-300',
-              ].join(' ')}
+                "flex shrink-0 flex-col items-center justify-center rounded-md border border-dashed bg-white px-4 py-5 text-center transition-colors",
+                isDragging ? "border-zinc-900 bg-zinc-100" : "border-zinc-300",
+              ].join(" ")}
               onDragOver={(event) => {
                 event.preventDefault();
                 setIsDragging(true);
@@ -376,17 +480,18 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               <Upload className="size-6 text-zinc-700" />
               <p className="mt-3 text-sm font-medium">Upload images</p>
               <p className="mt-1 text-xs text-zinc-500">
-                {images.length} / {MAX_IMAGES}, max {formatBytes(MAX_IMAGE_BYTES)} each
+                {images.length} / {MAX_IMAGES}, max{" "}
+                {formatBytes(MAX_IMAGE_BYTES)} each
               </p>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={ALLOWED_IMAGE_TYPES.join(',')}
+                accept={ALLOWED_IMAGE_TYPES.join(",")}
                 multiple
                 className="hidden"
                 onChange={(event) => {
                   if (event.target.files) void addFiles(event.target.files);
-                  event.target.value = '';
+                  event.target.value = "";
                 }}
               />
               <Button
@@ -394,7 +499,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                 variant="outline"
                 size="sm"
                 className="mt-4"
-                disabled={images.length >= MAX_IMAGES || status === 'expired'}
+                disabled={images.length >= MAX_IMAGES || status === "expired"}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload data-icon="inline-start" />
@@ -428,26 +533,68 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                       className="aspect-square size-[88px] rounded object-cover"
                     />
                     <div className="min-w-0 py-1">
-                      <p className="truncate text-sm font-medium">{image.name}</p>
-                      <p className="mt-1 text-xs text-zinc-500">{formatBytes(image.size)}</p>
-                      <p className="mt-1 truncate text-xs text-zinc-500">{image.mimeType}</p>
+                      <p className="truncate text-sm font-medium">
+                        {image.name}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {formatBytes(image.size)}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-zinc-500">
+                        {image.mimeType}
+                      </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Remove ${image.name}`}
-                      disabled={status === 'expired'}
-                      onClick={() => removeImage(image.id)}
-                    >
-                      <Trash2 />
-                    </Button>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Download ${image.name}`}
+                        onClick={() => downloadImage(image)}
+                      >
+                        <Download />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove ${image.name}`}
+                        disabled={status === "expired"}
+                        onClick={() => removeImage(image.id)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           </aside>
         </section>
+        <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+          <DialogContent className="max-w-sm gap-4 rounded-md p-5">
+            <DialogHeader className="pr-8">
+              <DialogTitle>Clear text?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-zinc-600">
+              This will remove all text from the current session.
+            </p>
+            <DialogFooter className="flex-row justify-end">
+              <DialogClose
+                render={<Button type="button" variant="ghost" size="sm" />}
+              >
+                Cancel
+              </DialogClose>
+              <Button
+                type="button"
+                size="sm"
+                className={"min-w-25"}
+                onClick={confirmClearText}
+              >
+                Clear
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {message ? (
           <div className="fixed right-4 bottom-4 z-50 max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-lg">
             {message}
