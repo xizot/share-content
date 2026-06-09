@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Plus,
   RefreshCw,
+  Share2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -402,9 +403,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               {copied ? (
                 <Check data-icon="inline-start" />
               ) : (
-                <Copy data-icon="inline-start" />
+                <Share2 data-icon="inline-start" />
               )}
-              {copied ? "Copied" : "Copy link"}
+              {copied ? "Copied" : "Share link"}
             </Button>
             <Button
               type="button"
