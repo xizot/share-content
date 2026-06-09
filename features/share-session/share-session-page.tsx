@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/design-system/components/ui/dialog";
+import { ThemeToggle } from "@/design-system/components/ui/theme-toggle";
 import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGES,
@@ -373,9 +374,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   };
 
   return (
-    <main className="h-screen overflow-hidden bg-zinc-50 text-zinc-950">
+    <main className="h-screen overflow-hidden bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
+        <header className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-normal">
@@ -391,6 +392,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <ThemeToggle />
             <Button
               type="button"
               size={"sm"}
@@ -421,11 +423,11 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         </header>
 
         <section className="grid min-h-0 flex-1 gap-5 overflow-hidden py-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="flex min-h-0 flex-col rounded-md border border-zinc-200 bg-white">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
+          <div className="flex min-h-0 flex-col rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
               <span className="text-sm font-medium">Text</span>
               <div className="flex items-center gap-1">
-                <span className="mr-2 text-xs text-zinc-500">
+                <span className="mr-2 text-xs text-zinc-500 dark:text-zinc-400">
                   {text.length.toLocaleString()} /{" "}
                   {MAX_TEXT_LENGTH.toLocaleString()}
                 </span>
@@ -456,15 +458,17 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               onChange={(event) => updateText(event.target.value)}
               placeholder="Paste text here..."
               disabled={status === "expired"}
-              className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent p-4 text-sm [field-sizing:fixed] outline-none placeholder:text-zinc-400 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent p-4 text-sm [field-sizing:fixed] outline-none placeholder:text-zinc-400 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-500"
             />
           </div>
 
           <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
             <div
               className={[
-                "flex shrink-0 flex-col items-center justify-center rounded-md border border-dashed bg-white px-4 py-5 text-center transition-colors",
-                isDragging ? "border-zinc-900 bg-zinc-100" : "border-zinc-300",
+                "flex shrink-0 flex-col items-center justify-center rounded-md border border-dashed bg-white px-4 py-5 text-center transition-colors dark:bg-zinc-900",
+                isDragging
+                  ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-800"
+                  : "border-zinc-300 dark:border-zinc-700",
               ].join(" ")}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -477,9 +481,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                 void addFiles(event.dataTransfer.files);
               }}
             >
-              <Upload className="size-6 text-zinc-700" />
+              <Upload className="size-6 text-zinc-700 dark:text-zinc-200" />
               <p className="mt-3 text-sm font-medium">Upload images</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                 {images.length} / {MAX_IMAGES}, max{" "}
                 {formatBytes(MAX_IMAGE_BYTES)} each
               </p>
@@ -507,14 +511,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               </Button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col rounded-md border border-zinc-200 bg-white">
-              <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
+            <div className="flex min-h-0 flex-1 flex-col rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <span className="text-sm font-medium">Images</span>
-                <ImageIcon className="size-4 text-zinc-500" />
+                <ImageIcon className="size-4 text-zinc-500 dark:text-zinc-400" />
               </div>
               <div className="grid min-h-0 flex-1 content-start gap-3 overflow-auto p-3">
                 {images.length === 0 ? (
-                  <div className="flex min-h-32 items-center justify-center rounded-md bg-zinc-50 text-sm text-zinc-500">
+                  <div className="flex min-h-32 items-center justify-center rounded-md bg-zinc-50 text-sm text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
                     No images
                   </div>
                 ) : null}
@@ -522,7 +526,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                 {images.map((image) => (
                   <div
                     key={image.id}
-                    className="grid grid-cols-[88px_minmax(0,1fr)_32px] gap-3 rounded-md border border-zinc-200 p-2"
+                    className="grid grid-cols-[88px_minmax(0,1fr)_32px] gap-3 rounded-md border border-zinc-200 p-2 dark:border-zinc-800"
                   >
                     <NextImage
                       src={image.base64}
@@ -536,10 +540,10 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                       <p className="truncate text-sm font-medium">
                         {image.name}
                       </p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                         {formatBytes(image.size)}
                       </p>
-                      <p className="mt-1 truncate text-xs text-zinc-500">
+                      <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
                         {image.mimeType}
                       </p>
                     </div>
@@ -575,7 +579,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             <DialogHeader className="pr-8">
               <DialogTitle>Clear text?</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
               This will remove all text from the current session.
             </p>
             <DialogFooter className="flex-row justify-end">
@@ -596,7 +600,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
           </DialogContent>
         </Dialog>
         {message ? (
-          <div className="fixed right-4 bottom-4 z-50 max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-lg">
+          <div className="fixed right-4 bottom-4 z-50 max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
             {message}
           </div>
         ) : null}
