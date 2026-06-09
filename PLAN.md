@@ -59,6 +59,7 @@ The app keeps values small because in-memory cache increases process memory usag
 - `/`: creates a new session and redirects to `/s/[sessionId]`.
 - `/s/[sessionId]`: editable shared session page.
 - `/s/[sessionId]` lazily creates an empty in-memory session when the ID is valid but not present in the current process cache.
+- `/shorten`: hidden short-link UI for users who know the route.
 
 ### API
 
@@ -66,6 +67,8 @@ The app keeps values small because in-memory cache increases process memory usag
 - `GET /api/sessions/[sessionId]`: returns session text and images.
 - `PUT /api/sessions/[sessionId]`: replaces session text and image list.
 - `DELETE /api/sessions/[sessionId]`: removes session metadata and image entries.
+- `POST /go`: creates a short link with a 4-hour TTL.
+- `GET /go/[code]`: redirects to the original URL while the short link is alive.
 
 Expired sessions return `410 Gone`.
 
