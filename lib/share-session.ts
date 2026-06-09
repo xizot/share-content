@@ -164,11 +164,13 @@ export function createSessionId() {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 20);
 }
 
-export async function createSharedSession() {
+export async function createSharedSession(sessionId = createSessionId()) {
+  assertValidSessionId(sessionId);
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000).toISOString();
   const session: SharedSessionMeta = {
-    id: createSessionId(),
+    id: sessionId,
     text: '',
     imageIds: [],
     createdAt: now.toISOString(),
@@ -180,6 +182,22 @@ export async function createSharedSession() {
   await cache.set(getSessionKey(session.id), session, createCacheOptions(expiresAt));
 
   return session;
+}
+
+export async function getOrCreateSharedSession(sessionId: string): Promise<SharedSession> {
+  try {
+    return await getSharedSession(sessionId);
+  } catch (error) {
+    if (isShareSessionError(error) && error.status === 404) {
+      const session = await createSharedSession(sessionId);
+      return {
+        ...session,
+        images: [],
+      };
+    }
+
+    throw error;
+  }
 }
 
 export async function getSharedSession(sessionId: string): Promise<SharedSession> {
@@ -221,7 +239,7 @@ export async function updateSharedSession(sessionId: string, input: SessionUpdat
 
   input.images.forEach(assertValidImage);
 
-  const current = await getSharedSession(sessionId);
+  const current = await getOrCreateSharedSession(sessionId);
   const ttl = getRemainingTtl(current.expiresAt);
   if (ttl <= 0) {
     throw new ShareSessionError('Session expired.', 410);

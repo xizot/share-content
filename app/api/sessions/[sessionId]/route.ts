@@ -1,6 +1,6 @@
 import {
   deleteSharedSession,
-  getSharedSession,
+  getOrCreateSharedSession,
   isShareSessionError,
   updateSharedSession,
   type SharedImage,
@@ -30,7 +30,7 @@ type SessionRouteContext = {
 export async function GET(_request: Request, context: SessionRouteContext) {
   try {
     const { sessionId } = await context.params;
-    const session = await getSharedSession(sessionId);
+    const session = await getOrCreateSharedSession(sessionId);
 
     return jsonResponse({ session });
   } catch (error) {

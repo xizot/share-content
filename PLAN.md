@@ -58,6 +58,7 @@ The app keeps values small because in-memory cache increases process memory usag
 
 - `/`: creates a new session and redirects to `/s/[sessionId]`.
 - `/s/[sessionId]`: editable shared session page.
+- `/s/[sessionId]` lazily creates an empty in-memory session when the ID is valid but not present in the current process cache.
 
 ### API
 
