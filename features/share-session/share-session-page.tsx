@@ -48,7 +48,7 @@ type ShareSessionPageProps = {
   sessionId: string;
 };
 
-const SAVE_DEBOUNCE_MS = 700;
+const SAVE_DEBOUNCE_MS = 200;
 
 function createImageId() {
   return crypto.randomUUID().replaceAll("-", "").slice(0, 20);
