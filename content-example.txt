@@ -1,0 +1,60 @@
+{
+  "from": "onRequest",
+  "Time": "2026-06-10 10:31:31.910866",
+  "baseUrl": "http://247tech.vn:25028/api/v1/",
+  "path": "pickup-tasks/complete-pickup",
+  "headers": {
+    "Content-Type": "application/json",
+    "OS": "android",
+    "DeviceID": "6aa93b4d45ec2340",
+    "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMy00YjMzLTQyMzItMzIzMC0zNTM0MDAwMDAwMDAiLCJlbWFpbCI6IiIsImp0aSI6IjViYmQwNmUyLWJmN2EtNGQwMC1hYjk4LTc5ZThhYjQyZDFkMiIsImVtcGxveWVlSWQiOiIwMDAwMDAwMy00YjMzLTQyMzItMzIzMC0zNTM0MDAwMDAwMDAiLCJlbXBsb3llZUNvZGUiOiJLM0ItMjItMDU0IiwiZnVsbE5hbWUiOiJOZ3V54buFbiBWxINuIFRow6FpIiwicGhvbmUiOiIwOTAyODIwODY0Iiwiam9iVGl0bGVOYW1lIjoiTlYgbMOhaSB4ZSDEkcaw4budbmcgZMOgaSIsImlzQWRtaW4iOiJmYWxzZSIsInB2IjoiMCIsImNvbXBhbnlJZCI6IjAxMDAwMDAwLTcwMDAtNTAwMC0wMDAwLTAwMDAwMDAwMDAwMSIsImRlcGFydG1lbnRJZCI6IjAwMDAwMDAyLTRiMzMtNDIwMC0wMDAwLTAwMDAwMDAwMDAwMCIsImRlcGFydG1lbnROYW1lIjoiS2hhaSB0aMOhYyB2w7luZyAzQiIsInJvbGVOYW1lcyI6IkRyaXZlciIsInBlcm1pc3Npb25zIjpbIlZlaGljbGUuUmVhZCIsIlZlaGljbGUuUGFpcmluZy5SZWFkIiwiVmVoaWNsZS5QYWlyaW5nLlVwZGF0ZSIsIkRyaXZlci5SZWFkIiwiUG9zdE9mZmljZS5SZWFkIiwiUGxhbm5pbmcuUmVhZCIsIk9yZGVyLlJlYWQiLCJQaWNrdXBUYXNrLlJlYWQiLCJQaWNrdXBUYXNrLlVwZGF0ZSIsIlBhcnRuZXIuUmVhZCIsIk1haW50ZW5hbmNlUGxhbi5SZWFkIiwiTWFpbnRlbmFuY2VQbGFuLkNyZWF0ZSIsIk1haW50ZW5hbmNlUGxhbi5VcGRhdGUiLCJJbnNwZWN0aW9uUGxhbi5SZWFkIiwiSW5zcGVjdGlvblBsYW4uQ3JlYXRlIiwiSW5zcGVjdGlvblBsYW4uVXBkYXRlIiwiVHJ1Y2tKb3VybmV5LlJlYWQiLCJEcml2ZXJKb3VybmV5LlJlYWQiLCJGb3JlY2FzdC5SZWFkIiwiTGluZWhhdWwuUmVhZCIsIkxpbmVoYXVsLkNyZWF0ZSIsIkxpbmVoYXVsLlVwZGF0ZSIsIlJlc2N1ZS5SZWFkIiwiUmVzY3VlLkNyZWF0ZSIsIkluY2lkZW50LkNyZWF0ZSIsIkRlbGl2ZXJ5LlJlYWQiLCJEZWxpdmVyeS5DcmVhdGUiLCJEZWxpdmVyeS5VcGRhdGUiLCJUcmFja2luZy5SZWFkIiwiQ29uZmlnLlZlaGljbGUuUmVhZCIsIkNvbmZpZy5QYXJ0bmVyLlJlYWQiLCJDb25maWcuR29vZHMuUmVhZCIsIkNvbmZpZy5NYWludGVuYW5jZS5SZWFkIiwiQ29uZmlnLkxlZ2FsLlJlYWQiLCJDb25maWcuUGlja3VwVGFzay5SZWFkIiwiQ29uZmlnLlRyYW5zcG9ydFJlbnRhbC5SZWFkIiwiQ29uZmlnLkhhbmRvdmVyQ29uZGl0aW9uLlJlYWQiLCJDb25maWcuRGVsaXZlcnkuUmVhZCIsIkZpbGUuUmVhZCIsIkZpbGUuVXBsb2FkIiwiTm90aWZpY2F0aW9uLlJlYWQiLCJMaW5laGF1bC5NYW5hZ2UiLCJEZWxpdmVyeS5NYW5hZ2UiXSwiYWNjZXNzRGVwYXJ0bWVudHMiOiJLM0IiLCJleHAiOjE3ODEwODk5MjMsImlzcyI6IjI0Ny1FY28tU3lzdGVtIiwiYXVkIjoidG1zLWFwaSJ9.aJqJ65Xy2PNp6ZklZU4Pl2V59WBdxxAM3KxPlQmkXkHeLNTa4VOVQvCYVPb94UhrjWyZRQHwnKQk1mCJ86MjvfpqltaptUbVQ22CrHi4it_u9ov7_qhxCFHGvOjsx6_GlYGTvy0TLKTHjYalwTe8Z-IAf3O6ze6hOAPHKtmtccBE6Qzbjt7ya_CiM964qWyBbzgJqVAZAksztn69FGMlAVrS5xk7LOtTqw3WumWM2lRQn5l39Rwd_hoX9lh3iulSxR4EB5H_LnxJV_811jXZQ64nMQXWSorw3hFCFlyKrxQKolQ-dIOj_XixBBeiOKorvBW4W_rzZGKAy1LF4MY47A",
+    "CompanyId": "01000000-7000-5000-0000-000000000001",
+    "DepartmentId": "00000002-4b33-4200-0000-000000000000",
+    "X-Latitude": "10.8381012",
+    "X-Longitude": "106.6279986",
+    "x-client-type": "android",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 9; samsung SM-S9210) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 247Driver/0.52.0.212 UserName/K3B-22-054",
+    "content-length": "806"
+  },
+  "method": "PUT",
+  "requestData": {
+    "pickupTaskIds": [
+      "VLC_2606_0160DT/2"
+    ],
+    "handover": {
+      "handoverType": 1,
+      "method": 1,
+      "latitude": 10.8381012,
+      "longitude": 106.6279986,
+      "handoverConditionId": null,
+      "senderId": "00000003-4b33-4232-3230-353400000000",
+      "senderCode": "K3B-22-054",
+      "senderName": "Nguyễn Văn Thái",
+      "senderAvatarUrl": "",
+      "receiverId": "00000003-4b33-4232-3230-353400000000",
+      "receiverCode": "K3B-22-054",
+      "receiverName": "Nguyễn Văn Thái",
+      "receiverAvatarUrl": "",
+      "participants": [
+        {
+          "employeeId": "00000003-4b33-4232-3230-353400000000",
+          "employeeName": "Nguyễn Văn Thái",
+          "employeeCode": "K3B-22-054",
+          "participationRate": 100.0,
+          "isResponsible": true
+        }
+      ],
+      "senderEvidences": [],
+      "receiverEvidences": [],
+      "handoverInfos": [
+        {
+          "pickupTaskId": "VLC_2606_0160DT/2",
+          "returnPostOfficeCode": "K3B",
+          "returnPostOfficeName": "Khai thác vùng 3B",
+          "isOperationCenter": true
+        }
+      ]
+    }
+  },
+  "queryParameters": {}
+}

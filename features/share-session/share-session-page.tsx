@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Share2,
+  Terminal,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -49,7 +50,18 @@ type ShareSessionPageProps = {
   sessionId: string;
 };
 
+type RequestLog = {
+  baseUrl?: unknown;
+  path?: unknown;
+  headers?: unknown;
+  method?: unknown;
+  requestData?: unknown;
+  queryParameters?: unknown;
+};
+
 const SAVE_DEBOUNCE_MS = 200;
+const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
+const OMITTED_CURL_HEADERS = new Set(["content-length"]);
 
 function createImageId() {
   return crypto.randomUUID().replaceAll("-", "").slice(0, 20);
@@ -123,6 +135,107 @@ function getSafeFileName(name: string) {
   return name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "image";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function appendQueryParameters(url: URL, queryParameters: unknown) {
+  if (!isRecord(queryParameters)) return;
+
+  for (const [key, value] of Object.entries(queryParameters)) {
+    if (value === null || value === undefined) continue;
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== null && item !== undefined) {
+          url.searchParams.append(key, String(item));
+        }
+      }
+      continue;
+    }
+
+    url.searchParams.set(key, String(value));
+  }
+}
+
+function buildRequestUrl(baseUrl: string, path: string, queryParameters: unknown) {
+  const url = /^https?:\/\//i.test(path)
+    ? new URL(path)
+    : new URL(path.replace(/^\/+/, ""), `${baseUrl.replace(/\/+$/, "")}/`);
+
+  appendQueryParameters(url, queryParameters);
+  return url.toString();
+}
+
+function formatCurlHeaderValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).join(", ");
+  }
+
+  if (isRecord(value)) {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function parseTextAsCurl(value: string) {
+  let payload: RequestLog;
+
+  try {
+    payload = JSON.parse(value.trim()) as RequestLog;
+  } catch {
+    throw new Error("Text is not a valid JSON request log.");
+  }
+
+  if (!isRecord(payload)) {
+    throw new Error("Text is not a valid JSON request log.");
+  }
+
+  const baseUrl = typeof payload.baseUrl === "string" ? payload.baseUrl : "";
+  const path = typeof payload.path === "string" ? payload.path : "";
+  const method =
+    typeof payload.method === "string" ? payload.method.toUpperCase() : "GET";
+
+  if (!baseUrl && !/^https?:\/\//i.test(path)) {
+    throw new Error("Request log needs baseUrl and path.");
+  }
+
+  const lines = [
+    `curl --location --request ${method} ${shellQuote(
+      buildRequestUrl(baseUrl, path, payload.queryParameters),
+    )}`,
+  ];
+
+  if (isRecord(payload.headers)) {
+    for (const [name, headerValue] of Object.entries(payload.headers)) {
+      if (
+        headerValue === null ||
+        headerValue === undefined ||
+        OMITTED_CURL_HEADERS.has(name.toLowerCase())
+      ) {
+        continue;
+      }
+
+      lines.push(
+        `  --header ${shellQuote(`${name}: ${formatCurlHeaderValue(headerValue)}`)}`,
+      );
+    }
+  }
+
+  if ("requestData" in payload && !BODYLESS_METHODS.has(method)) {
+    lines.push(
+      `  --data-raw ${shellQuote(JSON.stringify(payload.requestData, null, 2))}`,
+    );
+  }
+
+  return lines.join(" \\\n");
+}
+
 export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<SharedImage[]>([]);
@@ -130,6 +243,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const [message, setMessage] = useState("Loading session...");
   const [copied, setCopied] = useState(false);
   const [textCopied, setTextCopied] = useState(false);
+  const [curlCopied, setCurlCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
@@ -334,6 +448,20 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     window.setTimeout(() => setTextCopied(false), 1500);
   };
 
+  const copyAsCurl = async () => {
+    try {
+      const curl = parseTextAsCurl(textRef.current);
+      await navigator.clipboard.writeText(curl);
+      setCurlCopied(true);
+      setMessage("cURL copied");
+      window.setTimeout(() => setCurlCopied(false), 1500);
+    } catch (error: unknown) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to parse cURL.",
+      );
+    }
+  };
+
   const clearText = () => {
     if (!textRef.current) return;
 
@@ -432,6 +560,21 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                   {text.length.toLocaleString()} /{" "}
                   {MAX_TEXT_LENGTH.toLocaleString()}
                 </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Copy as cURL"
+                  disabled={!text}
+                  onClick={copyAsCurl}
+                >
+                  {curlCopied ? (
+                    <Check data-icon="inline-start" />
+                  ) : (
+                    <Terminal data-icon="inline-start" />
+                  )}
+                  cURL
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
