@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 const SHORT_LINK_TTL_SECONDS = 4 * 60 * 60;
 const MAX_URL_LENGTH = 4_000;
 const CODE_PATTERN = /^[a-zA-Z0-9_-]{8,32}$/;
+const PREVIEW_USER_AGENT_PATTERN =
+  /bot|crawler|spider|preview|facebookexternalhit|facebot|twitterbot|slackbot|discordbot|telegrambot|whatsapp|skypeuripreview|linkedinbot|embedly|pinterest|redditbot|applebot|zalo|viber|line/i;
 
 type ShortLinkEntry = {
   url: string;
@@ -25,6 +27,36 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   });
 }
 
+function noPreviewResponse(status = 200, includeBody = true) {
+  return new Response(
+    includeBody
+      ? `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+    <meta property="og:title" content="Short link" />
+    <meta property="og:description" content="Open this link in your browser." />
+    <meta name="twitter:card" content="summary" />
+    <title>Short link</title>
+  </head>
+  <body>
+    <p>Open this link in your browser.</p>
+  </body>
+</html>`
+      : null,
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet",
+      },
+    },
+  );
+}
+
 function createCode() {
   return crypto.randomUUID().replaceAll("-", "").slice(0, 10);
 }
@@ -35,6 +67,12 @@ function getCode(params: { code?: string[] }) {
 
 function isExpired(entry: ShortLinkEntry) {
   return new Date(entry.expiresAt).getTime() <= Date.now();
+}
+
+function isLinkPreviewRequest(request: Request) {
+  const userAgent = request.headers.get("user-agent") ?? "";
+
+  return request.method === "HEAD" || PREVIEW_USER_AGENT_PATTERN.test(userAgent);
 }
 
 function normalizeUrl(value: unknown) {
@@ -101,7 +139,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(_request: Request, context: ShortLinkRouteContext) {
+async function resolveShortLink(request: Request, context: ShortLinkRouteContext) {
   const params = await context.params;
   const code = getCode(params);
 
@@ -119,5 +157,17 @@ export async function GET(_request: Request, context: ShortLinkRouteContext) {
     return jsonResponse({ error: "Short link expired." }, { status: 410 });
   }
 
+  if (isLinkPreviewRequest(request)) {
+    return noPreviewResponse(200, request.method !== "HEAD");
+  }
+
   redirect(entry.url);
+}
+
+export async function GET(request: Request, context: ShortLinkRouteContext) {
+  return resolveShortLink(request, context);
+}
+
+export async function HEAD(request: Request, context: ShortLinkRouteContext) {
+  return resolveShortLink(request, context);
 }
