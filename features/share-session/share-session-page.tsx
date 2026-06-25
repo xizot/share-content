@@ -14,9 +14,9 @@ import {
   Upload,
 } from "lucide-react";
 import NextImage from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Badge } from "@/design-system/components/ui/badge";
 import { Button } from "@/design-system/components/ui/button";
 import {
   Dialog,
@@ -246,6 +246,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const [curlCopied, setCurlCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const latestFingerprintRef = useRef("");
   const revisionRef = useRef(0);
@@ -266,6 +267,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       session.images,
     );
     dirtyRef.current = false;
+    setHasUnsavedChanges(false);
   }, []);
 
   const loadSession = useCallback(
@@ -283,6 +285,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       const payload = await parseApiResponse<ApiSessionResponse>(response);
 
       if (mode === "manual" && dirtyRef.current) {
+        setStatus("idle");
         setMessage("Save current changes before refreshing.");
         return;
       }
@@ -297,7 +300,11 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const saveSession = useCallback(
     async (nextText: string, nextImages: SharedImage[]) => {
       const fingerprint = getPayloadFingerprint(nextText, nextImages);
-      if (fingerprint === latestFingerprintRef.current) return;
+      if (fingerprint === latestFingerprintRef.current) {
+        dirtyRef.current = false;
+        setHasUnsavedChanges(false);
+        return;
+      }
 
       setStatus("saving");
       setMessage("Saving...");
@@ -331,6 +338,15 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     },
     [applySession, sessionId],
   );
+
+  const saveCurrentSession = useCallback(async () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    await saveSession(textRef.current, imagesRef.current);
+  }, [saveSession]);
 
   const createNewSession = useCallback(async () => {
     setStatus("loading");
@@ -380,6 +396,38 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     };
   }, [images, saveSession, text]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+        return;
+      }
+
+      event.preventDefault();
+      void saveCurrentSession().catch((error: unknown) => {
+        const nextMessage = getDisplayMessage(error, "Unable to save session.");
+        setStatus(
+          nextMessage.toLowerCase().includes("expired") ? "expired" : "error",
+        );
+        setMessage(nextMessage);
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [saveCurrentSession]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyRef.current && status !== "saving") return;
+
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [status]);
+
   const updateText = (value: string) => {
     if (value.length > MAX_TEXT_LENGTH) {
       setStatus("error");
@@ -388,6 +436,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     }
 
     dirtyRef.current = true;
+    setHasUnsavedChanges(true);
     textRef.current = value;
     setText(value);
     setStatus("idle");
@@ -423,6 +472,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     if (nextImages.length === 0) return;
 
     dirtyRef.current = true;
+    setHasUnsavedChanges(true);
     const updatedImages = [...imagesRef.current, ...nextImages];
     imagesRef.current = updatedImages;
     setImages(updatedImages);
@@ -432,6 +482,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   const removeImage = (imageId: string) => {
     dirtyRef.current = true;
+    setHasUnsavedChanges(true);
     const updatedImages = imagesRef.current.filter(
       (image) => image.id !== imageId,
     );
@@ -502,21 +553,40 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     });
   };
 
+  const statusLabel = (() => {
+    if (status === "loading") return "Loading";
+    if (status === "saving") return "Saving...";
+    if (status === "error") return message || "Unable to save";
+    if (status === "expired") return message || "Expired";
+    if (hasUnsavedChanges) return "Unsaved";
+    if (status === "saved") return message || "Saved";
+    return message || "Ready";
+  })();
+
+  const statusClassName = (() => {
+    if (status === "error" || status === "expired") {
+      return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300";
+    }
+
+    if (status === "saving" || hasUnsavedChanges) {
+      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300";
+    }
+
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300";
+  })();
+
   return (
     <main className="h-screen overflow-hidden bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-normal">
-                Share Content
-              </h1>
-              <Badge
-                variant="outline"
-                className="max-w-full rounded-md font-sans"
+              <Link
+                href="/"
+                className="text-2xl font-semibold tracking-normal outline-none transition-colors hover:text-zinc-700 focus-visible:ring-3 focus-visible:ring-zinc-400/50 dark:hover:text-zinc-300"
               >
-                {sessionId}
-              </Badge>
+                Share Content
+              </Link>
             </div>
           </div>
 
@@ -556,6 +626,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
               <span className="text-sm font-medium">Text</span>
               <div className="flex items-center gap-1">
+                <span
+                  className={[
+                    "mr-2 rounded-md border px-2 py-1 text-xs font-medium",
+                    statusClassName,
+                  ].join(" ")}
+                >
+                  {statusLabel}
+                </span>
                 <span className="mr-2 text-xs text-zinc-500 dark:text-zinc-400">
                   {text.length.toLocaleString()} /{" "}
                   {MAX_TEXT_LENGTH.toLocaleString()}
@@ -743,11 +821,6 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        {message ? (
-          <div className="fixed right-4 bottom-4 z-50 max-w-[min(22rem,calc(100vw-2rem))] rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-            {message}
-          </div>
-        ) : null}
       </div>
     </main>
   );
