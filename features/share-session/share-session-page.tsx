@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Plus,
   RefreshCw,
+  RotateCcw,
   Share2,
   Terminal,
   Trash2,
@@ -40,6 +41,15 @@ type ApiSessionResponse = {
   session: SharedSession;
 };
 
+type ApiSessionRevisionResponse = {
+  session: {
+    id: string;
+    revision: number;
+    updatedAt: string;
+    expiresAt: string;
+  };
+};
+
 type ApiErrorResponse = {
   error: string;
 };
@@ -60,6 +70,7 @@ type RequestLog = {
 };
 
 const SAVE_DEBOUNCE_MS = 200;
+const REVISION_POLL_MS = 5000;
 const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
 const OMITTED_CURL_HEADERS = new Set(["content-length"]);
 
@@ -247,12 +258,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
 
   const latestFingerprintRef = useRef("");
   const revisionRef = useRef(0);
   const textRef = useRef("");
   const imagesRef = useRef<SharedImage[]>([]);
   const dirtyRef = useRef(false);
+  const remoteUpdateRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -267,7 +280,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       session.images,
     );
     dirtyRef.current = false;
+    remoteUpdateRef.current = false;
     setHasUnsavedChanges(false);
+    setHasRemoteUpdate(false);
   }, []);
 
   const loadSession = useCallback(
@@ -427,6 +442,83 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    let inFlight = false;
+
+    const clearPollTimeout = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const canPoll = () =>
+      document.visibilityState === "visible" &&
+      status !== "loading" &&
+      status !== "expired" &&
+      !hasRemoteUpdate;
+
+    const scheduleNextPoll = (delay = REVISION_POLL_MS) => {
+      clearPollTimeout();
+      if (!cancelled && canPoll()) {
+        timeoutId = window.setTimeout(pollRevision, delay);
+      }
+    };
+
+    const pollRevision = async () => {
+      if (cancelled || !canPoll()) return;
+
+      if (inFlight) {
+        scheduleNextPoll();
+        return;
+      }
+
+      inFlight = true;
+
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}/revision`, {
+          cache: "no-store",
+        });
+        const payload =
+          await parseApiResponse<ApiSessionRevisionResponse>(response);
+
+        if (
+          payload.session.revision > revisionRef.current &&
+          !remoteUpdateRef.current
+        ) {
+          remoteUpdateRef.current = true;
+          setHasRemoteUpdate(true);
+        }
+      } catch {
+        // Keep revision polling quiet; the main load/save flows surface errors.
+      } finally {
+        inFlight = false;
+        scheduleNextPoll();
+      }
+    };
+
+    scheduleNextPoll();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleNextPoll(0);
+        return;
+      }
+
+      clearPollTimeout();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      clearPollTimeout();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [hasRemoteUpdate, sessionId, status]);
 
   const updateText = (value: string) => {
     if (value.length > MAX_TEXT_LENGTH) {
@@ -821,6 +913,29 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {hasRemoteUpdate ? (
+          <div className="fixed right-4 bottom-4 z-50 w-[min(24rem,calc(100vw-2rem))] animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="rounded-md border border-zinc-200 bg-white/95 p-3 shadow-xl shadow-zinc-950/10 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/30">
+              <div className="flex gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                  <RotateCcw className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">New changes saved</p>
+                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    Refresh to load the latest session content.
+                  </p>
+                  <div className="mt-3 flex justify-end">
+                    <Button type="button" size="sm" onClick={refreshSession}>
+                      <RefreshCw data-icon="inline-start" />
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </main>
   );

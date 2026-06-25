@@ -200,6 +200,27 @@ export async function getOrCreateSharedSession(sessionId: string): Promise<Share
   }
 }
 
+export async function getSharedSessionRevision(sessionId: string) {
+  assertValidSessionId(sessionId);
+
+  const meta = await cache.get(getSessionKey(sessionId));
+  if (!isSharedSessionMeta(meta)) {
+    throw new ShareSessionError('Session not found.', 404);
+  }
+
+  if (getRemainingTtl(meta.expiresAt) <= 0) {
+    await deleteSharedSession(sessionId, meta);
+    throw new ShareSessionError('Session expired.', 410);
+  }
+
+  return {
+    id: meta.id,
+    revision: meta.revision,
+    updatedAt: meta.updatedAt,
+    expiresAt: meta.expiresAt,
+  };
+}
+
 export async function getSharedSession(sessionId: string): Promise<SharedSession> {
   assertValidSessionId(sessionId);
 
