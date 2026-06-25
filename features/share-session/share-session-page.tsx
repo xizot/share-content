@@ -668,8 +668,12 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   })();
 
   return (
-    <main className="h-screen overflow-hidden bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
+    <main className="relative h-screen overflow-hidden bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.06)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_0%,black_52%,transparent_82%)] dark:bg-[linear-gradient(to_right,rgba(244,244,245,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(244,244,245,0.06)_1px,transparent_1px)]"
+      />
+      <div className="relative mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex shrink-0 flex-col gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

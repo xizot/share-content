@@ -22,7 +22,7 @@ export {
   type SharedSessionMeta,
 };
 
-const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{10,64}$/;
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 type CacheSetOptions = {
   ttl?: number;
