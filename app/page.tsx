@@ -2,7 +2,7 @@
 
 import { ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type PointerEvent } from 'react';
 
 import { Button } from '@/design-system/components/ui/button';
 import { Input } from '@/design-system/components/ui/input';
@@ -58,11 +58,33 @@ export default function Home() {
     }
   };
 
+  const updatePointerGlow = (event: PointerEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty('--pointer-x', `${event.clientX}px`);
+    event.currentTarget.style.setProperty('--pointer-y', `${event.clientY}px`);
+  };
+
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-50 px-4 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+    <main
+      className="group relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-50 px-4 text-zinc-950 [--pointer-x:50vw] [--pointer-y:50vh] dark:bg-zinc-950 dark:text-zinc-50"
+      onPointerMove={updatePointerGlow}
+    >
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.08)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_0%,black_45%,transparent_78%)] dark:bg-[linear-gradient(to_right,rgba(244,244,245,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(244,244,245,0.08)_1px,transparent_1px)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{
+          background:
+            'linear-gradient(to right, rgba(24,24,27,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(24,24,27,0.12) 1px, transparent 1px), radial-gradient(230px circle at var(--pointer-x) var(--pointer-y), rgba(255,255,255,0.68), rgba(255,255,255,0.2) 42%, transparent 74%)',
+          backgroundPosition:
+            'calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), 0 0',
+          backgroundSize: '52px 52px, 52px 52px, 100% 100%',
+          maskImage:
+            'radial-gradient(220px circle at var(--pointer-x) var(--pointer-y), black 0%, black 42%, transparent 76%)',
+          mixBlendMode: 'soft-light',
+        }}
       />
       <section className="relative w-full max-w-md animate-in fade-in slide-in-from-bottom-3 duration-500">
         <div className="mb-5">
@@ -96,7 +118,7 @@ export default function Home() {
             onClick={handleContinue}
           >
             <ArrowRight data-icon="inline-start" />
-            Continue
+            Go
           </Button>
         </div>
 
