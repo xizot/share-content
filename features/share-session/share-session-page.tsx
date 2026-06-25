@@ -262,6 +262,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   const latestFingerprintRef = useRef("");
   const revisionRef = useRef(0);
+  const updatedAtRef = useRef("");
   const textRef = useRef("");
   const imagesRef = useRef<SharedImage[]>([]);
   const dirtyRef = useRef(false);
@@ -275,6 +276,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     textRef.current = session.text;
     imagesRef.current = session.images;
     revisionRef.current = session.revision;
+    updatedAtRef.current = session.updatedAt;
     latestFingerprintRef.current = getPayloadFingerprint(
       session.text,
       session.images,
@@ -348,6 +350,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       }
 
       revisionRef.current = payload.session.revision;
+      updatedAtRef.current = payload.session.updatedAt;
       setStatus("idle");
       setMessage("");
     },
@@ -485,10 +488,12 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         const payload =
           await parseApiResponse<ApiSessionRevisionResponse>(response);
 
-        if (
-          payload.session.revision > revisionRef.current &&
-          !remoteUpdateRef.current
-        ) {
+        const hasNewerRevision = payload.session.revision > revisionRef.current;
+        const hasNewerTimestamp =
+          Boolean(updatedAtRef.current) &&
+          payload.session.updatedAt !== updatedAtRef.current;
+
+        if ((hasNewerRevision || hasNewerTimestamp) && !remoteUpdateRef.current) {
           remoteUpdateRef.current = true;
           setHasRemoteUpdate(true);
         }
