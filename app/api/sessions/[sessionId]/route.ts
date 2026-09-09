@@ -1,19 +1,19 @@
 import {
   deleteSharedSession,
-  getOrCreateSharedSession,
+  getSharedSession,
   isShareSessionError,
   updateSharedSession,
   type SharedImage,
-} from '@/lib/share-session';
+} from "@/lib/share-session";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return Response.json(body, {
     ...init,
     headers: {
-      'Cache-Control': 'no-store',
+      "Cache-Control": "no-store",
       ...init?.headers,
     },
   });
@@ -30,7 +30,7 @@ type SessionRouteContext = {
 export async function GET(_request: Request, context: SessionRouteContext) {
   try {
     const { sessionId } = await context.params;
-    const session = await getOrCreateSharedSession(sessionId);
+    const session = await getSharedSession(sessionId);
 
     return jsonResponse({ session });
   } catch (error) {
@@ -38,22 +38,35 @@ export async function GET(_request: Request, context: SessionRouteContext) {
       return jsonResponse({ error: error.message }, { status: error.status });
     }
 
-    return jsonResponse({ error: 'Unable to load session.' }, { status: 500 });
+    return jsonResponse({ error: "Unable to load session." }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request, context: SessionRouteContext) {
   try {
     const { sessionId } = await context.params;
-    const body = (await request.json()) as { text?: unknown; images?: unknown };
+    const body = (await request.json()) as {
+      text?: unknown;
+      images?: unknown;
+      revision?: unknown;
+    };
 
-    if (typeof body.text !== 'string' || !isImageArray(body.images)) {
-      return jsonResponse({ error: 'Invalid request body.' }, { status: 400 });
+    if (
+      !body ||
+      typeof body.text !== "string" ||
+      (body.images !== undefined && !isImageArray(body.images)) ||
+      (body.revision !== undefined &&
+        (typeof body.revision !== "number" ||
+          !Number.isInteger(body.revision) ||
+          body.revision < 0))
+    ) {
+      return jsonResponse({ error: "Invalid request body." }, { status: 400 });
     }
 
     const session = await updateSharedSession(sessionId, {
       text: body.text,
-      images: body.images,
+      images: body.images as SharedImage[] | undefined,
+      revision: body.revision as number | undefined,
     });
 
     return jsonResponse({ session });
@@ -62,7 +75,7 @@ export async function PUT(request: Request, context: SessionRouteContext) {
       return jsonResponse({ error: error.message }, { status: error.status });
     }
 
-    return jsonResponse({ error: 'Unable to save session.' }, { status: 500 });
+    return jsonResponse({ error: "Unable to save session." }, { status: 500 });
   }
 }
 
@@ -77,6 +90,9 @@ export async function DELETE(_request: Request, context: SessionRouteContext) {
       return jsonResponse({ error: error.message }, { status: error.status });
     }
 
-    return jsonResponse({ error: 'Unable to delete session.' }, { status: 500 });
+    return jsonResponse(
+      { error: "Unable to delete session." },
+      { status: 500 },
+    );
   }
 }

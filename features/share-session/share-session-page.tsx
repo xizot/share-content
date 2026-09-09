@@ -99,7 +99,14 @@ function getPayloadFingerprint(text: string, images: SharedImage[]) {
 
 function getDisplayMessage(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
-  return message === "Session not found." ? "" : message;
+  if (message === "Session not found.")
+    return "Session not found or no longer available. Your draft has not been saved.";
+  if (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  )
+    return "Request timed out. Please retry.";
+  return message;
 }
 
 async function parseApiResponse<T>(response: Response): Promise<T> {
@@ -178,10 +185,7 @@ function formatCurlBody(option: string, value: string) {
 
   try {
     const body = JSON.parse(value.slice(1, -1)) as unknown;
-    const formattedBody = JSON.stringify(body, null, 2).replace(
-      /\n/g,
-      "\n  ",
-    );
+    const formattedBody = JSON.stringify(body, null, 2).replace(/\n/g, "\n  ");
     return `${option} ${quote}${formattedBody}${quote}`;
   } catch {
     return `${option} ${value}`;
@@ -251,12 +255,16 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const remoteUpdateRef = useRef(false);
   const saveTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const savedImagesRef = useRef<SharedImage[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const applySession = useCallback((session: SharedSession) => {
     setText(session.text);
     setImages(session.images);
     textRef.current = session.text;
     imagesRef.current = session.images;
+    savedImagesRef.current = session.images;
     revisionRef.current = session.revision;
     updatedAtRef.current = session.updatedAt;
     latestFingerprintRef.current = getPayloadFingerprint(
@@ -271,6 +279,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   const loadSession = useCallback(
     async (mode: "initial" | "manual" = "initial") => {
+      const revisionAtStart = revisionRef.current;
       if (mode === "initial") {
         setStatus("loading");
         setMessage("Loading session...");
@@ -280,64 +289,111 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
       const response = await fetch(`/api/sessions/${sessionId}`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(15000),
       });
       const payload = await parseApiResponse<ApiSessionResponse>(response);
 
-      if (mode === "manual" && dirtyRef.current) {
+      if (
+        dirtyRef.current ||
+        saveInFlightRef.current ||
+        revisionRef.current !== revisionAtStart
+      ) {
         setStatus("idle");
         setMessage("Save current changes before refreshing.");
         return;
       }
 
       applySession(payload.session);
+      setLoaded(true);
       setStatus("saved");
       setMessage("Saved");
     },
     [applySession, sessionId],
   );
 
-  const saveSession = useCallback(
-    async (nextText: string, nextImages: SharedImage[]) => {
-      const fingerprint = getPayloadFingerprint(nextText, nextImages);
-      if (fingerprint === latestFingerprintRef.current) {
-        dirtyRef.current = false;
-        setHasUnsavedChanges(false);
-        return;
+  const saveSession = useCallback(async () => {
+    if (saveInFlightRef.current) return saveInFlightRef.current;
+    const operation = (async () => {
+      while (dirtyRef.current) {
+        const nextText = textRef.current;
+        const nextImages = imagesRef.current;
+        const fingerprint = getPayloadFingerprint(nextText, nextImages);
+        if (fingerprint === latestFingerprintRef.current) {
+          dirtyRef.current = false;
+          setHasUnsavedChanges(false);
+          setStatus("saved");
+          setMessage("Saved");
+          return;
+        }
+
+        setStatus("saving");
+        setMessage("Saving...");
+
+        let payload: ApiSessionResponse | undefined;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const response = await fetch(`/api/sessions/${sessionId}`, {
+              method: "PUT",
+              signal: AbortSignal.timeout(15000),
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                text: nextText,
+                images:
+                  nextImages === savedImagesRef.current
+                    ? undefined
+                    : nextImages,
+                revision: revisionRef.current,
+              }),
+            });
+            if (response.status >= 400 && response.status < 500) {
+              const failure = await response.json();
+              throw new Error(failure.error || "Unable to save session.", {
+                cause: "permanent",
+              });
+            }
+            payload = await parseApiResponse<ApiSessionResponse>(response);
+            break;
+          } catch (error) {
+            if (
+              attempt === 2 ||
+              (error instanceof Error && error.cause === "permanent")
+            )
+              throw error;
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, 500 * 2 ** attempt),
+            );
+          }
+        }
+        if (!payload) throw new Error("Unable to save session.");
+        const currentFingerprint = getPayloadFingerprint(
+          textRef.current,
+          imagesRef.current,
+        );
+
+        if (currentFingerprint === fingerprint) {
+          applySession(payload.session);
+          setStatus("saved");
+          setMessage("Saved");
+          return;
+        }
+
+        revisionRef.current = payload.session.revision;
+        updatedAtRef.current = payload.session.updatedAt;
+        latestFingerprintRef.current = fingerprint;
+        savedImagesRef.current = nextImages;
+        setStatus("idle");
+        setMessage("");
       }
-
-      setStatus("saving");
-      setMessage("Saving...");
-
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: nextText,
-          images: nextImages,
-        }),
-      });
-      const payload = await parseApiResponse<ApiSessionResponse>(response);
-      const currentFingerprint = getPayloadFingerprint(
-        textRef.current,
-        imagesRef.current,
-      );
-
-      if (currentFingerprint === fingerprint) {
-        applySession(payload.session);
-        setStatus("saved");
-        setMessage("Saved");
-        return;
-      }
-
-      revisionRef.current = payload.session.revision;
-      updatedAtRef.current = payload.session.updatedAt;
-      setStatus("idle");
-      setMessage("");
-    },
-    [applySession, sessionId],
-  );
+    })();
+    saveInFlightRef.current = operation;
+    try {
+      await operation;
+    } finally {
+      saveInFlightRef.current = null;
+    }
+  }, [applySession, sessionId]);
 
   const saveCurrentSession = useCallback(async () => {
     if (saveTimerRef.current) {
@@ -345,19 +401,33 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       saveTimerRef.current = null;
     }
 
-    await saveSession(textRef.current, imagesRef.current);
+    await saveSession();
   }, [saveSession]);
 
   const createNewSession = useCallback(async () => {
+    await saveCurrentSession();
     setStatus("loading");
     setMessage("Creating session...");
 
     const response = await fetch("/api/sessions", {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
     });
     const payload = await parseApiResponse<{ url: string }>(response);
     window.location.assign(payload.url);
-  }, []);
+  }, [saveCurrentSession]);
+
+  const retrySave = useCallback(() => {
+    void saveCurrentSession().catch((error: unknown) => {
+      setStatus("error");
+      setMessage(getDisplayMessage(error, "Unable to save session."));
+    });
+  }, [saveCurrentSession]);
+
+  useEffect(() => {
+    window.addEventListener("online", retrySave);
+    return () => window.removeEventListener("online", retrySave);
+  }, [retrySave]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -372,7 +442,11 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
 
   useEffect(() => {
     const fingerprint = getPayloadFingerprint(text, images);
-    if (!dirtyRef.current || fingerprint === latestFingerprintRef.current)
+    if (
+      !loaded ||
+      !dirtyRef.current ||
+      fingerprint === latestFingerprintRef.current
+    )
       return;
 
     if (saveTimerRef.current) {
@@ -380,7 +454,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     }
 
     saveTimerRef.current = window.setTimeout(() => {
-      saveSession(text, images).catch((error: unknown) => {
+      saveSession().catch((error: unknown) => {
         const nextMessage = getDisplayMessage(error, "Unable to save session.");
         setStatus(
           nextMessage.toLowerCase().includes("expired") ? "expired" : "error",
@@ -394,11 +468,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [images, saveSession, text]);
+  }, [images, loaded, saveSession, text]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
         return;
       }
 
@@ -466,6 +543,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       try {
         const response = await fetch(`/api/sessions/${sessionId}/revision`, {
           cache: "no-store",
+          signal: AbortSignal.timeout(15000),
         });
         const payload =
           await parseApiResponse<ApiSessionRevisionResponse>(response);
@@ -475,7 +553,14 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
           Boolean(updatedAtRef.current) &&
           payload.session.updatedAt !== updatedAtRef.current;
 
-        if ((hasNewerRevision || hasNewerTimestamp) && !remoteUpdateRef.current) {
+        if (
+          (hasNewerRevision || hasNewerTimestamp) &&
+          !remoteUpdateRef.current
+        ) {
+          if (!dirtyRef.current && !saveInFlightRef.current) {
+            await loadSession("manual");
+            return;
+          }
           remoteUpdateRef.current = true;
           setHasRemoteUpdate(true);
         }
@@ -505,7 +590,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
       clearPollTimeout();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [hasRemoteUpdate, sessionId, status]);
+  }, [hasRemoteUpdate, loadSession, sessionId, status]);
 
   const updateText = (value: string) => {
     if (value.length > MAX_TEXT_LENGTH) {
@@ -523,6 +608,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   };
 
   const addFiles = async (fileList: FileList | File[]) => {
+    if (!loaded || status === "expired") return;
     const files = Array.from(fileList);
     const slotsLeft = MAX_IMAGES - imagesRef.current.length;
     const acceptedFiles = files.slice(0, slotsLeft);
@@ -629,10 +715,18 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   };
 
   const copyLink = async () => {
-    const shareUrl = `${window.location.origin}/s/${sessionId}`;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await saveCurrentSession();
+      const shareUrl = `${window.location.origin}/s/${sessionId}`;
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      setStatus("error");
+      setMessage(
+        getDisplayMessage(error, "Unable to save or copy share link."),
+      );
+    }
   };
 
   const refreshSession = () => {
@@ -696,6 +790,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               size={"sm"}
               variant="outline"
               onClick={copyLink}
+              disabled={!loaded}
             >
               {copied ? (
                 <Check data-icon="inline-start" />
@@ -713,7 +808,18 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               <RefreshCw data-icon="inline-start" />
               Refresh
             </Button>
-            <Button type="button" size={"sm"} onClick={createNewSession}>
+            <Button
+              type="button"
+              size={"sm"}
+              onClick={() =>
+                void createNewSession().catch((error: unknown) => {
+                  setStatus("error");
+                  setMessage(
+                    getDisplayMessage(error, "Unable to create session."),
+                  );
+                })
+              }
+            >
               <Plus data-icon="inline-start" />
               New session
             </Button>
@@ -733,6 +839,16 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                 >
                   {statusLabel}
                 </span>
+                {status === "error" && hasUnsavedChanges && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={retrySave}
+                  >
+                    Retry save
+                  </Button>
+                )}
                 <span className="mr-2 text-xs text-zinc-500 dark:text-zinc-400">
                   {text.length.toLocaleString()} /{" "}
                   {MAX_TEXT_LENGTH.toLocaleString()}
@@ -765,7 +881,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               onBlur={formatText}
               onPaste={() => window.setTimeout(formatText, 0)}
               placeholder="Paste text here..."
-              disabled={status === "expired"}
+              disabled={!loaded || status === "expired"}
               className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent p-4 text-sm [field-sizing:fixed] outline-none placeholder:text-zinc-400 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-500"
             />
             {isValidCurl(text) && (
@@ -942,10 +1058,7 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        <Dialog
-          open={responseDialogOpen}
-          onOpenChange={setResponseDialogOpen}
-        >
+        <Dialog open={responseDialogOpen} onOpenChange={setResponseDialogOpen}>
           <DialogContent className="max-h-[85vh] max-w-4xl gap-4 rounded-md p-5">
             <DialogHeader className="pr-8">
               <DialogTitle>

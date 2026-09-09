@@ -3,7 +3,12 @@ export const MAX_TEXT_LENGTH = 200_000;
 export const MAX_IMAGES = 8;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export const ALLOWED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
 
 export type SharedImage = {
   id: string;
@@ -30,5 +35,6 @@ export type SharedSession = SharedSessionMeta & {
 
 export type SessionUpdateInput = {
   text: string;
-  images: SharedImage[];
+  images?: SharedImage[];
+  revision?: number;
 };

@@ -2,6 +2,21 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Sessions are stored only in process RAM, as an intentional deployment choice.
+Module copies in the same process share the cache; separate Vercel instances do not.
+Cold starts, restarts, and instance eviction lose sessions. The 8-hour TTL is an
+upper bound, not a persistence guarantee. A missing session returns 404 rather
+than creating an empty session when a share link is opened. Create/join named
+sessions from the home page, or use the upsert API to explicitly create content.
+
+Autosave waits 200 ms, serializes writes, and retries transient failures up to
+three attempts with a 15-second timeout per attempt. Share link waits for save
+completion. Unedited receiver pages refresh content after revision polling
+(normally every 5 seconds). Concurrent edits with a stale revision return 409;
+copy the local draft before refreshing to resolve the conflict.
+
+Run session regression checks with `node --test tests/share-session.test.cjs`.
+
 First, run the development server:
 
 ```bash

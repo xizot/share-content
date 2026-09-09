@@ -1,11 +1,10 @@
-'use client';
+"use client";
 
-import { ArrowRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState, type PointerEvent } from 'react';
+import { ArrowRight } from "lucide-react";
+import { useState, type PointerEvent } from "react";
 
-import { Button } from '@/design-system/components/ui/button';
-import { Input } from '@/design-system/components/ui/input';
+import { Button } from "@/design-system/components/ui/button";
+import { Input } from "@/design-system/components/ui/input";
 
 type CreateSessionResponse = {
   url: string;
@@ -15,52 +14,56 @@ type ErrorResponse = {
   error: string;
 };
 
-async function createSession() {
-  const response = await fetch('/api/sessions', {
-    method: 'POST',
+async function createSession(sessionId?: string) {
+  const response = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId }),
+    signal: AbortSignal.timeout(15000),
   });
-  const payload = (await response.json()) as CreateSessionResponse | ErrorResponse;
+  const payload = (await response.json()) as
+    CreateSessionResponse | ErrorResponse;
 
   if (!response.ok) {
-    throw new Error('error' in payload ? payload.error : 'Unable to create session.');
+    throw new Error(
+      "error" in payload ? payload.error : "Unable to create session.",
+    );
   }
 
-  if (!('url' in payload)) {
-    throw new Error('Unable to create session.');
+  if (!("url" in payload)) {
+    throw new Error("Unable to create session.");
   }
 
   return payload.url;
 }
 
 export default function Home() {
-  const router = useRouter();
-  const [sessionId, setSessionId] = useState('');
-  const [error, setError] = useState('');
+  const [sessionId, setSessionId] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleContinue = async () => {
     const nextSessionId = sessionId.trim();
 
-    if (nextSessionId) {
-      router.push(`/s/${encodeURIComponent(nextSessionId)}`);
-      return;
-    }
-
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      const url = await createSession();
+      const url = await createSession(nextSessionId || undefined);
       window.location.assign(url);
     } catch (caughtError: unknown) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to create session.');
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to create session.",
+      );
       setLoading(false);
     }
   };
 
   const updatePointerGlow = (event: PointerEvent<HTMLElement>) => {
-    event.currentTarget.style.setProperty('--pointer-x', `${event.clientX}px`);
-    event.currentTarget.style.setProperty('--pointer-y', `${event.clientY}px`);
+    event.currentTarget.style.setProperty("--pointer-x", `${event.clientX}px`);
+    event.currentTarget.style.setProperty("--pointer-y", `${event.clientY}px`);
   };
 
   return (
@@ -77,18 +80,20 @@ export default function Home() {
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
           background:
-            'linear-gradient(to right, rgba(24,24,27,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(24,24,27,0.12) 1px, transparent 1px), radial-gradient(230px circle at var(--pointer-x) var(--pointer-y), rgba(255,255,255,0.68), rgba(255,255,255,0.2) 42%, transparent 74%)',
+            "linear-gradient(to right, rgba(24,24,27,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(24,24,27,0.12) 1px, transparent 1px), radial-gradient(230px circle at var(--pointer-x) var(--pointer-y), rgba(255,255,255,0.68), rgba(255,255,255,0.2) 42%, transparent 74%)",
           backgroundPosition:
-            'calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), 0 0',
-          backgroundSize: '52px 52px, 52px 52px, 100% 100%',
+            "calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), calc(var(--pointer-x) * -0.55) calc(var(--pointer-y) * -0.55), 0 0",
+          backgroundSize: "52px 52px, 52px 52px, 100% 100%",
           maskImage:
-            'radial-gradient(220px circle at var(--pointer-x) var(--pointer-y), black 0%, black 42%, transparent 76%)',
-          mixBlendMode: 'soft-light',
+            "radial-gradient(220px circle at var(--pointer-x) var(--pointer-y), black 0%, black 42%, transparent 76%)",
+          mixBlendMode: "soft-light",
         }}
       />
       <section className="relative w-full max-w-md animate-in fade-in slide-in-from-bottom-3 duration-500">
         <div className="mb-5">
-          <h1 className="text-3xl font-semibold tracking-normal">Share Content</h1>
+          <h1 className="text-3xl font-semibold tracking-normal">
+            Share Content
+          </h1>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             Enter a session ID, or leave it blank to create one.
           </p>
@@ -99,10 +104,10 @@ export default function Home() {
             value={sessionId}
             onChange={(event) => {
               setSessionId(event.target.value);
-              setError('');
+              setError("");
             }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') {
+              if (event.key === "Enter") {
                 void handleContinue();
               }
             }}
@@ -122,7 +127,9 @@ export default function Home() {
           </Button>
         </div>
 
-        {error ? <p className="mt-3 text-sm font-medium text-red-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-3 text-sm font-medium text-red-600">{error}</p>
+        ) : null}
       </section>
     </main>
   );
