@@ -1,0 +1,23 @@
+curl \
+  --request POST \
+  --url http://247tech.vn:14300/api/Delivery/GetRemainingCODForReceipt \
+  --compressed \
+  --header 'Accept-Encoding: gzip' \
+  --header 'Connection: Keep-Alive' \
+  --header 'Content-Type: application/json' \
+  --header 'Host: 247tech.vn:14300' \
+  --header 'User-Agent: okhttp/4.9.2' \
+  --header 'accept: application/json' \
+  --header 'apikey: postman' \
+  --header 'apisecretkey: postman' \
+  --header 'appid: postman' \
+  --header 'appversion: 4.1.7' \
+  --header 'authorization: Bearer bd396b20-cf79-4bdb-ad4a-82d466804adf' \
+  --header 'currentuserid: TOK-24-001' \
+  --header 'deviceid: 6aa93b4d45ec2340' \
+  --header 'os: android' \
+  --header 'ssoid: TOK-24-001' \
+  --header 'token: bd396b20-cf79-4bdb-ad4a-82d466804adf' \
+  --header 'userid: TOK-24-001' \
+  --header 'username: TOK-24-001' \
+  --data '{"ApiKey":"POSTMAN","ApiSecretKey":"POSTMAN","EmployeeID":"TOK-24-001","appid":"postman","AppSource":"postman","DeviceID":"6aa93b4d45ec2340","app_version":"4.1.7","PostManVersion":"4.1.7","Platform":"android","OSVersion":"9","VersionNumber":"189","DeviceModel":"SM-S9210-SM-S9210","DeviceName":"SM-S9210","Manufacturer":"samsung","UserId":"TOK-24-001","POLoginID":"TOK","UserActionId":"TOK-24-001","Lng":106.6959995,"Lat":10.7618005,"Accuracy":0.019999999552965164,"FakeLocation":0,"Speed":0.018167339265346527,"Z":0,"DeviceTime":1788938563414,"Heading":0,"Battery":100,"IsPlugged":true}'

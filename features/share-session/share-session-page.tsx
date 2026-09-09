@@ -9,8 +9,8 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Send,
   Share2,
-  Terminal,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -36,6 +36,7 @@ import {
   type SharedImage,
   type SharedSession,
 } from "@/lib/share-session-schema";
+import { isValidCurl } from "@/lib/curl";
 
 type ApiSessionResponse = {
   session: SharedSession;
@@ -55,24 +56,22 @@ type ApiErrorResponse = {
 };
 
 type SaveStatus = "idle" | "loading" | "saving" | "saved" | "error" | "expired";
+type SendStatus = "idle" | "sending" | "success" | "error";
+
+type ExecuteCurlResponse = {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+  truncated: boolean;
+};
 
 type ShareSessionPageProps = {
   sessionId: string;
 };
 
-type RequestLog = {
-  baseUrl?: unknown;
-  path?: unknown;
-  headers?: unknown;
-  method?: unknown;
-  requestData?: unknown;
-  queryParameters?: unknown;
-};
-
 const SAVE_DEBOUNCE_MS = 200;
 const REVISION_POLL_MS = 5000;
-const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
-const OMITTED_CURL_HEADERS = new Set(["content-length"]);
 
 function createImageId() {
   return crypto.randomUUID().replaceAll("-", "").slice(0, 20);
@@ -146,105 +145,83 @@ function getSafeFileName(name: string) {
   return name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "image";
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function shellQuote(value: string) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function appendQueryParameters(url: URL, queryParameters: unknown) {
-  if (!isRecord(queryParameters)) return;
-
-  for (const [key, value] of Object.entries(queryParameters)) {
-    if (value === null || value === undefined) continue;
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item !== null && item !== undefined) {
-          url.searchParams.append(key, String(item));
-        }
-      }
-      continue;
-    }
-
-    url.searchParams.set(key, String(value));
-  }
-}
-
-function buildRequestUrl(baseUrl: string, path: string, queryParameters: unknown) {
-  const url = /^https?:\/\//i.test(path)
-    ? new URL(path)
-    : new URL(path.replace(/^\/+/, ""), `${baseUrl.replace(/\/+$/, "")}/`);
-
-  appendQueryParameters(url, queryParameters);
-  return url.toString();
-}
-
-function formatCurlHeaderValue(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item)).join(", ");
-  }
-
-  if (isRecord(value)) {
-    return JSON.stringify(value);
-  }
-
-  return String(value);
-}
-
-function parseTextAsCurl(value: string) {
-  let payload: RequestLog;
+function getFormatKind(value: string): "json" | "curl" | null {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return null;
 
   try {
-    payload = JSON.parse(value.trim()) as RequestLog;
+    JSON.parse(trimmedValue);
+    return "json";
   } catch {
-    throw new Error("Text is not a valid JSON request log.");
+    return /^curl(?:\s|$)/i.test(trimmedValue) ? "curl" : null;
+  }
+}
+
+const CURL_BODY_OPTIONS = new Set([
+  "--data",
+  "--data-ascii",
+  "--data-binary",
+  "--data-raw",
+  "--data-urlencode",
+  "-d",
+]);
+
+function formatCurlBody(option: string, value: string) {
+  if (!CURL_BODY_OPTIONS.has(option.toLowerCase())) {
+    return `${option} ${value}`;
   }
 
-  if (!isRecord(payload)) {
-    throw new Error("Text is not a valid JSON request log.");
+  const quote = value[0];
+  if ((quote !== "'" && quote !== '"') || value[value.length - 1] !== quote) {
+    return `${option} ${value}`;
   }
 
-  const baseUrl = typeof payload.baseUrl === "string" ? payload.baseUrl : "";
-  const path = typeof payload.path === "string" ? payload.path : "";
-  const method =
-    typeof payload.method === "string" ? payload.method.toUpperCase() : "GET";
-
-  if (!baseUrl && !/^https?:\/\//i.test(path)) {
-    throw new Error("Request log needs baseUrl and path.");
-  }
-
-  const lines = [
-    `curl --location --request ${method} ${shellQuote(
-      buildRequestUrl(baseUrl, path, payload.queryParameters),
-    )}`,
-  ];
-
-  if (isRecord(payload.headers)) {
-    for (const [name, headerValue] of Object.entries(payload.headers)) {
-      if (
-        headerValue === null ||
-        headerValue === undefined ||
-        OMITTED_CURL_HEADERS.has(name.toLowerCase())
-      ) {
-        continue;
-      }
-
-      lines.push(
-        `  --header ${shellQuote(`${name}: ${formatCurlHeaderValue(headerValue)}`)}`,
-      );
-    }
-  }
-
-  if ("requestData" in payload && !BODYLESS_METHODS.has(method)) {
-    lines.push(
-      `  --data-raw ${shellQuote(JSON.stringify(payload.requestData, null, 2))}`,
+  try {
+    const body = JSON.parse(value.slice(1, -1)) as unknown;
+    const formattedBody = JSON.stringify(body, null, 2).replace(
+      /\n/g,
+      "\n  ",
     );
+    return `${option} ${quote}${formattedBody}${quote}`;
+  } catch {
+    return `${option} ${value}`;
+  }
+}
+
+function formatCurl(value: string) {
+  const normalizedValue = value
+    .trim()
+    .replace(/\\\s*\r?\n\s*/g, " ")
+    .replace(/\s+/g, " ");
+  const tokens = normalizedValue.match(
+    /(?:[^\s"'\\]|\\.|"(?:\\.|[^"])*"|'(?:\\.|[^'])*')+/g,
+  );
+
+  if (!tokens || tokens[0].toLowerCase() !== "curl") return value;
+
+  const lines = [tokens[0]];
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const nextToken = tokens[index + 1];
+
+    if (token.startsWith("-") && nextToken && !nextToken.startsWith("-")) {
+      lines.push(`  ${formatCurlBody(token, nextToken)}`);
+      index += 1;
+    } else {
+      lines.push(`  ${token}`);
+    }
   }
 
   return lines.join(" \\\n");
+}
+
+function formatContent(value: string) {
+  const formatKind = getFormatKind(value);
+  if (!formatKind) return value;
+
+  return formatKind === "json"
+    ? JSON.stringify(JSON.parse(value.trim()), null, 2)
+    : formatCurl(value);
 }
 
 export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
@@ -254,11 +231,16 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
   const [message, setMessage] = useState("Loading session...");
   const [copied, setCopied] = useState(false);
   const [textCopied, setTextCopied] = useState(false);
-  const [curlCopied, setCurlCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
+  const [sendStatus, setSendStatus] = useState<SendStatus>("idle");
+  const [sendError, setSendError] = useState("");
+  const [sendResponse, setSendResponse] = useState<ExecuteCurlResponse | null>(
+    null,
+  );
+  const [responseDialogOpen, setResponseDialogOpen] = useState(false);
 
   const latestFingerprintRef = useRef("");
   const revisionRef = useRef(0);
@@ -596,16 +578,32 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
     window.setTimeout(() => setTextCopied(false), 1500);
   };
 
-  const copyAsCurl = async () => {
+  const formatText = () => {
+    const formattedText = formatContent(textRef.current);
+
+    if (formattedText !== textRef.current) {
+      updateText(formattedText);
+    }
+  };
+
+  const sendCurl = async () => {
+    setSendStatus("sending");
+    setSendError("");
+    setSendResponse(null);
+
     try {
-      const curl = parseTextAsCurl(textRef.current);
-      await navigator.clipboard.writeText(curl);
-      setCurlCopied(true);
-      setMessage("cURL copied");
-      window.setTimeout(() => setCurlCopied(false), 1500);
+      const response = await fetch("/api/execute-curl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ curl: textRef.current }),
+      });
+      const payload = await parseApiResponse<ExecuteCurlResponse>(response);
+      setSendResponse(payload);
+      setSendStatus("success");
     } catch (error: unknown) {
-      setMessage(
-        error instanceof Error ? error.message : "Unable to parse cURL.",
+      setSendStatus("error");
+      setSendError(
+        error instanceof Error ? error.message : "Unable to send cURL request.",
       );
     }
   };
@@ -742,21 +740,6 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  aria-label="Copy as cURL"
-                  disabled={!text}
-                  onClick={copyAsCurl}
-                >
-                  {curlCopied ? (
-                    <Check data-icon="inline-start" />
-                  ) : (
-                    <Terminal data-icon="inline-start" />
-                  )}
-                  cURL
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
                   size="icon-sm"
                   aria-label="Copy full text"
                   disabled={!text}
@@ -779,10 +762,47 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
             <textarea
               value={text}
               onChange={(event) => updateText(event.target.value)}
+              onBlur={formatText}
+              onPaste={() => window.setTimeout(formatText, 0)}
               placeholder="Paste text here..."
               disabled={status === "expired"}
               className="min-h-0 flex-1 resize-none overflow-auto rounded-none border-0 bg-transparent p-4 text-sm [field-sizing:fixed] outline-none placeholder:text-zinc-400 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-zinc-500"
             />
+            {isValidCurl(text) && (
+              <div className="flex shrink-0 flex-col gap-3 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void sendCurl()}
+                    disabled={status === "expired" || sendStatus === "sending"}
+                  >
+                    <Send data-icon="inline-start" />
+                    {sendStatus === "sending" ? "Sending..." : "Send"}
+                  </Button>
+                  {sendStatus === "success" && sendResponse && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        HTTP {sendResponse.status} {sendResponse.statusText}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setResponseDialogOpen(true)}
+                      >
+                        View response
+                      </Button>
+                    </div>
+                  )}
+                  {sendStatus === "error" && (
+                    <span className="text-xs text-red-600 dark:text-red-400">
+                      {sendError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <aside className="flex min-h-0 flex-col gap-4 overflow-hidden">
@@ -919,6 +939,40 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               >
                 Clear
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={responseDialogOpen}
+          onOpenChange={setResponseDialogOpen}
+        >
+          <DialogContent className="max-h-[85vh] max-w-4xl gap-4 rounded-md p-5">
+            <DialogHeader className="pr-8">
+              <DialogTitle>
+                Response
+                {sendResponse
+                  ? ` · HTTP ${sendResponse.status} ${sendResponse.statusText}`
+                  : ""}
+              </DialogTitle>
+            </DialogHeader>
+            {sendResponse && (
+              <div className="min-h-0 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+                <pre className="whitespace-pre-wrap break-words text-zinc-700 dark:text-zinc-300">
+                  {sendResponse.body || "(empty response)"}
+                </pre>
+                {sendResponse.truncated && (
+                  <p className="mt-2 text-amber-600 dark:text-amber-400">
+                    Response truncated at 200 KB.
+                  </p>
+                )}
+              </div>
+            )}
+            <DialogFooter className="flex-row justify-end">
+              <DialogClose
+                render={<Button type="button" variant="ghost" size="sm" />}
+              >
+                Close
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>
