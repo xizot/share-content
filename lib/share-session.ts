@@ -22,7 +22,8 @@ export {
   type SharedSessionMeta,
 };
 
-const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const SESSION_EXTEND_SECONDS = 4 * 60 * 60;
+const SESSION_ID_PATTERN =/^[a-zA-Z0-9_-]{1,64}$/;
 
 type CacheSetOptions = {
   ttl?: number;
@@ -340,13 +341,20 @@ async function updateSession(sessionId: string, input: SessionUpdateInput) {
     throw new ShareSessionError("Session expired.", 410);
   }
 
+  // Every save extends the session by SESSION_EXTEND_SECONDS from now
+  // (never shortening an expiry that is already further out).
+  const extendedExpiry = Date.now() + SESSION_EXTEND_SECONDS * 1000;
+  const expiresAt = new Date(
+    Math.max(extendedExpiry, new Date(current.expiresAt).getTime()),
+  ).toISOString();
+
   const nextMeta: SharedSessionMeta = {
     id: current.id,
     text: input.text,
     imageIds: images.map((image) => image.id),
     createdAt: current.createdAt,
     updatedAt: new Date().toISOString(),
-    expiresAt: current.expiresAt,
+    expiresAt,
     revision: current.revision + 1,
   };
 
@@ -360,9 +368,10 @@ async function updateSession(sessionId: string, input: SessionUpdateInput) {
     ),
   );
 
-  const options = createCacheOptions(current.expiresAt);
+  // Re-set every image so its cache TTL follows the extended expiry.
+  const options = createCacheOptions(expiresAt);
   await Promise.all(
-    (input.images ?? []).map((image) =>
+    images.map((image) =>
       cache.set(getImageKey(sessionId, image.id), image, options),
     ),
   );

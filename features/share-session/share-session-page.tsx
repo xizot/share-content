@@ -287,10 +287,22 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         setMessage("Refreshing...");
       }
 
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      });
+      const fetchSession = () =>
+        fetch(`/api/sessions/${sessionId}`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+      let response = await fetchSession();
+      if (response.status === 404 && mode === "initial") {
+        // Unknown on this instance: (re)create it, then load again.
+        await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+          signal: AbortSignal.timeout(15000),
+        });
+        response = await fetchSession();
+      }
       const payload = await parseApiResponse<ApiSessionResponse>(response);
 
       if (
@@ -330,6 +342,9 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
         setMessage("Saving...");
 
         let payload: ApiSessionResponse | undefined;
+        // When the server no longer has the session (cold start, another
+        // instance), recreate it from the local draft instead of failing.
+        let recreate = false;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
             const response = await fetch(`/api/sessions/${sessionId}`, {
@@ -338,15 +353,23 @@ export function ShareSessionPage({ sessionId }: ShareSessionPageProps) {
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                text: nextText,
-                images:
-                  nextImages === savedImagesRef.current
-                    ? undefined
-                    : nextImages,
-                revision: revisionRef.current,
-              }),
+              body: JSON.stringify(
+                recreate
+                  ? { text: nextText, images: nextImages }
+                  : {
+                      text: nextText,
+                      images:
+                        nextImages === savedImagesRef.current
+                          ? undefined
+                          : nextImages,
+                      revision: revisionRef.current,
+                    },
+              ),
             });
+            if (response.status === 404 && !recreate) {
+              recreate = true;
+              continue;
+            }
             if (response.status >= 400 && response.status < 500) {
               const failure = await response.json();
               throw new Error(failure.error || "Unable to save session.", {

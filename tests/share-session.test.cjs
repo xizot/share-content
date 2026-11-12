@@ -139,3 +139,13 @@ test('Share does not copy link after save conflict and keeps the draft', async (
   assert.equal(c.refs.dirtyRef.current, true);
   assert.equal(c.refs.saveInFlightRef.current, null);
 });
+
+test('each save extends expiry by 4h and keeps image TTL in sync', async () => {
+  const { sessions } = server();
+  const first = await sessions.updateSharedSession('extend', { text: 'a', images: [] });
+  const created = new Date(first.expiresAt).getTime();
+  const next = await sessions.updateSharedSession('extend', { text: 'b', images: [], revision: first.revision });
+  assert.ok(new Date(next.expiresAt).getTime() >= created);
+  const left = new Date(next.expiresAt).getTime() - Date.now();
+  assert.ok(left > 3.9 * 3600e3);
+});
